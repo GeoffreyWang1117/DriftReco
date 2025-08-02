@@ -1,5 +1,3 @@
-# scripts/step3_train_deepfm_ms.py
-
 import os
 import pandas as pd
 import torch
@@ -7,9 +5,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
 
-class DeepFMDataset(Dataset):
+class AutoIntDataset(Dataset):
     def __init__(self, df):
         self.user_ids = torch.tensor(df['user_id_enc'].values, dtype=torch.long)
         self.item_ids = torch.tensor(df['item_id_enc'].values, dtype=torch.long)
@@ -31,15 +28,16 @@ class DeepFMDataset(Dataset):
             'rating': self.ratings[idx]
         }
 
-class DeepFM(nn.Module):
-    def __init__(self, field_dims, embedding_dim=16):
+class AutoInt(nn.Module):
+    def __init__(self, field_dims, embedding_dim=16, num_heads=2):
         super().__init__()
-        self.embeddings = nn.ModuleDict({
+        self.embedding_layers = nn.ModuleDict({
             name: nn.Embedding(dim, embedding_dim) for name, dim in field_dims.items() if dim > 0
         })
-        self.fm_bias = nn.Parameter(torch.zeros(1))
+        self.price_proj = nn.Linear(1, embedding_dim)
+        self.attention = nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=num_heads, batch_first=True)
         self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * (len(field_dims) - 1), 64),
+            nn.Linear(embedding_dim, 64),
             nn.ReLU(),
             nn.Linear(64, 32),
             nn.ReLU(),
@@ -47,11 +45,12 @@ class DeepFM(nn.Module):
         )
 
     def forward(self, x_cat, price):
-        emb_list = [self.embeddings[field](x_cat[i]) for i, field in enumerate(self.embeddings)]
-        fm_interaction = sum([e1 * e2 for i, e1 in enumerate(emb_list) for j, e2 in enumerate(emb_list) if i < j])
-        x_mlp = torch.cat(emb_list, dim=-1)
-        deep_output = self.mlp(x_mlp)
-        return (self.fm_bias + fm_interaction.sum(dim=1, keepdim=True) + deep_output + price.unsqueeze(1)).squeeze(1)
+        embed_list = [self.embedding_layers[field](x_cat[i]) for i, field in enumerate(self.embedding_layers)]
+        price_embed = self.price_proj(price.unsqueeze(1)).unsqueeze(1)
+        inputs = torch.stack(embed_list + [price_embed.squeeze(1)], dim=1)
+        attn_output, _ = self.attention(inputs, inputs, inputs)
+        pooled = attn_output.mean(dim=1)
+        return self.mlp(pooled).squeeze(1)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -60,14 +59,9 @@ if __name__ == "__main__":
 
     df = pd.read_csv(csv_path)
     df.fillna("unknown", inplace=True)
-
-    # ---------- 归一化 price ----------
     df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(-1.0)
-    price_valid = df["price"].replace(-1.0, np.nan)
-    min_price, max_price = price_valid.min(), price_valid.max()
-    df["price_norm"] = df["price"].apply(lambda x: (x - min_price) / (max_price - min_price) if x != -1.0 else -1.0)
+    df["price_norm"] = (df["price"] - df["price"].mean()) / (df["price"].std() + 1e-6)
 
-    # ---------- 编码分类特征 ----------
     user_enc = LabelEncoder()
     item_enc = LabelEncoder()
     cat_enc = LabelEncoder()
@@ -78,7 +72,7 @@ if __name__ == "__main__":
     df["category_enc"] = cat_enc.fit_transform(df["category"])
     df["brand_enc"] = brand_enc.fit_transform(df["brand"])
 
-    dataset = DeepFMDataset(df)
+    dataset = AutoIntDataset(df)
     dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
 
     field_dims = {
@@ -86,15 +80,15 @@ if __name__ == "__main__":
         "item_id": df["item_id_enc"].nunique(),
         "category": df["category_enc"].nunique(),
         "brand": df["brand_enc"].nunique(),
-        "price": 0  # 连续值特征
+        "price": 0
     }
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = DeepFM(field_dims).to(device)
+    model = AutoInt(field_dims).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()
 
-    print("🚀 Start training...")
+    print("🚀 Start training AutoInt...")
     for epoch in range(50):
         model.train()
         total_loss = 0
@@ -118,6 +112,6 @@ if __name__ == "__main__":
 
     model_dir = os.path.join(project_root, "models")
     os.makedirs(model_dir, exist_ok=True)
-    model_path = os.path.join(model_dir, "deepfm_model_full_ms.pt")
+    model_path = os.path.join(model_dir, "autoint_model_full_ms.pt")
     torch.save(model.state_dict(), model_path)
-    print(f"✅ Model saved to {model_path}")
+    print(f"✅ AutoInt Model saved to {model_path}")

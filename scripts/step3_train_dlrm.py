@@ -1,5 +1,3 @@
-# scripts/step3_train_deepfm_ms.py
-
 import os
 import pandas as pd
 import torch
@@ -7,9 +5,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
 
-class DeepFMDataset(Dataset):
+# ========== Dataset ========== #
+class DLRMDataset(Dataset):
     def __init__(self, df):
         self.user_ids = torch.tensor(df['user_id_enc'].values, dtype=torch.long)
         self.item_ids = torch.tensor(df['item_id_enc'].values, dtype=torch.long)
@@ -31,28 +29,53 @@ class DeepFMDataset(Dataset):
             'rating': self.ratings[idx]
         }
 
-class DeepFM(nn.Module):
-    def __init__(self, field_dims, embedding_dim=16):
+# ========== DLRM Model ========== #
+class DLRM(nn.Module):
+    def __init__(self, field_dims, embedding_dim=16, bottom_mlp_sizes=[64, 32], top_mlp_sizes=[64, 32, 1]):
         super().__init__()
-        self.embeddings = nn.ModuleDict({
-            name: nn.Embedding(dim, embedding_dim) for name, dim in field_dims.items() if dim > 0
+        self.embedding_layers = nn.ModuleDict({
+            name: nn.Embedding(dim, embedding_dim)
+            for name, dim in field_dims.items() if dim > 0
         })
-        self.fm_bias = nn.Parameter(torch.zeros(1))
-        self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * (len(field_dims) - 1), 64),
+        self.price_proj = nn.Linear(1, embedding_dim)
+
+        # Bottom MLP (dense feature)
+        self.bottom_mlp = nn.Sequential(
+            nn.Linear(embedding_dim, bottom_mlp_sizes[0]),
             nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1)
+            nn.Linear(bottom_mlp_sizes[0], bottom_mlp_sizes[1]),
+            nn.ReLU()
         )
 
-    def forward(self, x_cat, price):
-        emb_list = [self.embeddings[field](x_cat[i]) for i, field in enumerate(self.embeddings)]
-        fm_interaction = sum([e1 * e2 for i, e1 in enumerate(emb_list) for j, e2 in enumerate(emb_list) if i < j])
-        x_mlp = torch.cat(emb_list, dim=-1)
-        deep_output = self.mlp(x_mlp)
-        return (self.fm_bias + fm_interaction.sum(dim=1, keepdim=True) + deep_output + price.unsqueeze(1)).squeeze(1)
+        num_features = len(self.embedding_layers) + 1  # +1 for price
+        num_interactions = num_features * (num_features - 1) // 2
+        top_input_dim = num_interactions + bottom_mlp_sizes[-1]
 
+        top_layers = []
+        for i in range(len(top_mlp_sizes) - 1):
+            top_layers.append(nn.Linear(top_input_dim if i == 0 else top_mlp_sizes[i], top_mlp_sizes[i + 1]))
+            if i < len(top_mlp_sizes) - 2:
+                top_layers.append(nn.ReLU())
+        self.top_mlp = nn.Sequential(*top_layers)
+
+    def forward(self, x_cat, price):
+        emb_list = [self.embedding_layers[field](x_cat[i]) for i, field in enumerate(self.embedding_layers)]
+        dense_embed = self.price_proj(price.unsqueeze(1))
+        all_features = emb_list + [dense_embed]
+
+        # Pairwise interactions (dot product)
+        interactions = []
+        for i in range(len(all_features)):
+            for j in range(i + 1, len(all_features)):
+                interactions.append(torch.sum(all_features[i] * all_features[j], dim=1, keepdim=True))
+        interaction_term = torch.cat(interactions, dim=1)
+
+        dense_input = self.bottom_mlp(dense_embed)
+        concat = torch.cat([interaction_term, dense_input], dim=1)
+        out = self.top_mlp(concat).squeeze(1)
+        return out
+
+# ========== Training Script ========== #
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.abspath(os.path.join(script_dir, ".."))
@@ -60,25 +83,14 @@ if __name__ == "__main__":
 
     df = pd.read_csv(csv_path)
     df.fillna("unknown", inplace=True)
-
-    # ---------- 归一化 price ----------
     df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(-1.0)
-    price_valid = df["price"].replace(-1.0, np.nan)
-    min_price, max_price = price_valid.min(), price_valid.max()
-    df["price_norm"] = df["price"].apply(lambda x: (x - min_price) / (max_price - min_price) if x != -1.0 else -1.0)
+    df["price_norm"] = (df["price"] - df["price"].mean()) / (df["price"].std() + 1e-6)
 
-    # ---------- 编码分类特征 ----------
-    user_enc = LabelEncoder()
-    item_enc = LabelEncoder()
-    cat_enc = LabelEncoder()
-    brand_enc = LabelEncoder()
+    for col in ["user_id", "item_id", "category", "brand"]:
+        le = LabelEncoder()
+        df[f"{col}_enc"] = le.fit_transform(df[col])
 
-    df["user_id_enc"] = user_enc.fit_transform(df["user_id"])
-    df["item_id_enc"] = item_enc.fit_transform(df["item_id"])
-    df["category_enc"] = cat_enc.fit_transform(df["category"])
-    df["brand_enc"] = brand_enc.fit_transform(df["brand"])
-
-    dataset = DeepFMDataset(df)
+    dataset = DLRMDataset(df)
     dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
 
     field_dims = {
@@ -86,16 +98,16 @@ if __name__ == "__main__":
         "item_id": df["item_id_enc"].nunique(),
         "category": df["category_enc"].nunique(),
         "brand": df["brand_enc"].nunique(),
-        "price": 0  # 连续值特征
+        "price": 0
     }
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = DeepFM(field_dims).to(device)
+    model = DLRM(field_dims).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()
 
-    print("🚀 Start training...")
-    for epoch in range(50):
+    print("🚀 Start training DLRM...")
+    for epoch in range(50):  # 可改轮数
         model.train()
         total_loss = 0
         for batch in dataloader:
@@ -118,6 +130,6 @@ if __name__ == "__main__":
 
     model_dir = os.path.join(project_root, "models")
     os.makedirs(model_dir, exist_ok=True)
-    model_path = os.path.join(model_dir, "deepfm_model_full_ms.pt")
+    model_path = os.path.join(model_dir, "dlrm_model_full_ms.pt")
     torch.save(model.state_dict(), model_path)
-    print(f"✅ Model saved to {model_path}")
+    print(f"✅ DLRM Model saved to {model_path}")
