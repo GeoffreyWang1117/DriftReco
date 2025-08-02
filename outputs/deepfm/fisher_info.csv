@@ -1,0 +1,12 @@
+Parameter,FisherInformation
+fm_bias,2.106064558029175
+embeddings.user_id.weight,2.359305199206574e-06
+embeddings.item_id.weight,2.0954628610070358e-07
+embeddings.category.weight,0.7132751941680908
+embeddings.brand.weight,8.221452389989281e-07
+mlp.0.weight,0.6031702756881714
+mlp.0.bias,1.8410773277282715
+mlp.2.weight,0.3957058787345886
+mlp.2.bias,0.2698453664779663
+mlp.4.weight,32.35218811035156
+mlp.4.bias,2.106064558029175

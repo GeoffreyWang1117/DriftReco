@@ -1,0 +1,15 @@
+Parameter,FisherInformation
+embedding_layers.user_id.weight,1.927280779412399e-09
+embedding_layers.item_id.weight,2.4089774619540094e-10
+embedding_layers.category.weight,5.0563321565277874e-06
+embedding_layers.brand.weight,7.5236078478369e-10
+price_proj.weight,7.067079422995448e-06
+price_proj.bias,8.641353633720428e-05
+bottom_mlp.0.weight,1.425239702257386e-06
+bottom_mlp.0.bias,6.006176590744872e-06
+bottom_mlp.2.weight,2.9677385100512765e-06
+bottom_mlp.2.bias,1.2168549801572226e-05
+top_mlp.0.weight,4.091779192094691e-05
+top_mlp.0.bias,2.0059636881342158e-05
+top_mlp.2.weight,0.004132479894906282
+top_mlp.2.bias,0.0005497118108905852

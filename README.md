@@ -79,7 +79,7 @@ conda activate driftrec
 python data/preprocess.py
 
 # Step 4: Train model
-python training/step3_train_deepfm.py
+python training/step3_train_deepfm_ms.py
 
 # Step 5: Run analysis
 python analysis/step4_shap_analysis.py
