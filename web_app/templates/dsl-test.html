@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSL解析器测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        .input-section, .output-section { flex: 1; }
+        textarea { width: 100%; height: 300px; font-family: monospace; }
+        .output { background: #f5f5f5; padding: 15px; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+        button { padding: 10px 20px; margin: 10px 0; }
+        h3 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>🧪 SmartNet DSL 解析器测试</h1>
+    
+    <div class="container">
+        <div class="input-section">
+            <h3>📝 输入 (支持SmartNet DSL和YAML)</h3>
+            <textarea id="codeInput" placeholder="在此输入代码..."># 简单测试
+network TestNet:
+    input_dim: 128
+    output_dim: 10
+    
+    layer fc1: Linear(128, 64)
+    layer fc2: Linear(64, 10)
+    
+    connection: fc1 -> fc2</textarea>
+            <br>
+            <button onclick="testDSLParsing()">🔍 解析代码</button>
+            <button onclick="loadYAMLExample()">📄 加载YAML示例</button>
+            <button onclick="loadDSLExample()">💻 加载DSL示例</button>
+        </div>
+        
+        <div class="output-section">
+            <h3>📊 解析结果</h3>
+            <div id="output" class="output">点击"解析代码"查看结果...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/smartnet-dsl.js') }}"></script>
+    <script>
+        function testDSLParsing() {
+            const code = document.getElementById('codeInput').value;
+            const output = document.getElementById('output');
+            
+            try {
+                console.log('开始解析代码:', code.substring(0, 100) + '...');
+                console.log('window.smartNetDSL:', window.smartNetDSL);
+                
+                if (!window.smartNetDSL) {
+                    throw new Error('smartNetDSL解析器未加载');
+                }
+                
+                if (typeof window.smartNetDSL.parse !== 'function') {
+                    throw new Error('smartNetDSL.parse不是一个函数');
+                }
+                
+                const result = window.smartNetDSL.parse(code);
+                console.log('解析结果:', result);
+                
+                let html = '<h4 class="success">✅ 解析成功</h4>';
+                
+                // 网络基本信息
+                html += `<p><strong>网络名称:</strong> ${result.name || '未指定'}</p>`;
+                html += `<p><strong>参数:</strong> ${JSON.stringify(result.parameters, null, 2)}</p>`;
+                
+                // 层信息
+                html += `<p><strong>层数:</strong> ${result.layers.length}</p>`;
+                if (result.layers.length > 0) {
+                    html += '<details><summary>📋 层详情</summary><pre>';
+                    result.layers.forEach((layer, i) => {
+                        html += `${i+1}. ${layer.name} (${layer.type})\\n`;
+                        html += `   参数: ${JSON.stringify(layer.parameters, null, 2)}\\n\\n`;
+                    });
+                    html += '</pre></details>';
+                }
+                
+                // 连接信息
+                html += `<p><strong>连接数:</strong> ${result.connections.length}</p>`;
+                if (result.connections.length > 0) {
+                    html += '<details><summary>🔗 连接详情</summary><pre>';
+                    result.connections.forEach((conn, i) => {
+                        html += `${i+1}. ${conn.from} -> ${conn.to} (${conn.type})\\n`;
+                    });
+                    html += '</pre></details>';
+                }
+                
+                // 错误信息
+                if (result.errors && result.errors.length > 0) {
+                    html += `<h4 class="error">⚠️ 发现 ${result.errors.length} 个问题:</h4>`;
+                    html += '<ul>';
+                    result.errors.forEach(error => {
+                        html += `<li class="error">行${error.line}: ${error.message} (${error.type})</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                // 参数估算
+                try {
+                    if (window.smartNetDSL.estimateParameters) {
+                        const stats = window.smartNetDSL.estimateParameters(result);
+                        html += '<h4>📊 网络统计</h4>';
+                        html += `<p>总参数量: ${stats.total_parameters.toLocaleString()}</p>`;
+                        html += `<p>层数: ${stats.total_layers}</p>`;
+                        html += `<p>内存估计: ${stats.memory_estimate}</p>`;
+                    } else {
+                        html += `<p class="error">estimateParameters函数不可用</p>`;
+                    }
+                } catch (error) {
+                    html += `<p class="error">参数估算失败: ${error.message}</p>`;
+                    console.error('参数估算错误:', error);
+                }
+                
+                output.innerHTML = html;
+                
+            } catch (error) {
+                console.error('解析失败:', error);
+                output.innerHTML = `<h4 class="error">❌ 解析失败</h4><p class="error">${error.message}</p><pre>${error.stack}</pre>`;
+            }
+        }
+        
+        function loadYAMLExample() {
+            document.getElementById('codeInput').value = `name: SimpleMLP
+
+parameters:
+  input_dim: 128
+  output_dim: 10
+
+layers:
+  - name: fc1
+    type: Linear
+    parameters:
+      arg_0: 128
+      arg_1: 64
+  - name: fc2
+    type: Linear
+    parameters:
+      arg_0: 64
+      arg_1: 10
+
+connections:
+  - from: fc1
+    to: fc2
+    type: sequential`;
+        }
+        
+        function loadDSLExample() {
+            document.getElementById('codeInput').value = `# 简单多层感知机
+network SimpleMLP:
+    input_dim: 128
+    output_dim: 10
+    learning_rate: 0.001
+    
+    layer input: Linear(128, 64)
+    layer hidden1: Linear(64, 32)
+    layer output: Linear(32, 10)
+    
+    connection: input -> hidden1 -> output
+    activation: relu
+    dropout: 0.1`;
+        }
+        
+        // 自动测试
+        window.addEventListener('load', () => {
+            testDSLParsing();
+        });
+    </script>
+</body>
+</html>
