@@ -1,302 +1,144 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartNet - 智能神经网络可视化构建器</title>
+    <title>SmartNet Playground</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
-    <!-- 顶部导航栏 -->
-    <nav class="navbar">
-        <div class="nav-brand">
+    <header class="topbar">
+        <div class="logo">
             <i class="fas fa-brain"></i>
             <span>SmartNet</span>
-            <small>智能神经网络构建器</small>
+            <small>Playground</small>
         </div>
-        <div class="nav-controls">
-            <button class="btn btn-info" onclick="switchToCodeEditor()">
-                <i class="fas fa-code"></i> 代码编辑器
-            </button>
-            <button id="clearBtn" class="btn btn-warning">
-                <i class="fas fa-trash"></i> 清空画布
-            </button>
-            <button id="buildBtn" class="btn btn-primary">
-                <i class="fas fa-cogs"></i> 构建网络
-            </button>
-            <button id="trainBtn" class="btn btn-success" disabled>
-                <i class="fas fa-play"></i> 开始训练
-            </button>
+        <div class="presets">
+            <span class="presets-label">Presets:</span>
+            <button class="preset-btn" data-preset="xor">XOR Gate</button>
+            <button class="preset-btn" data-preset="circles">Circles</button>
+            <button class="preset-btn" data-preset="spiral">Spiral</button>
+            <button class="preset-btn" data-preset="moons">Moons</button>
+            <button class="preset-btn" data-preset="gauss">Gaussian 4D</button>
         </div>
-    </nav>
+        <button class="btn-reset" id="resetBtn" title="Clear all">
+            <i class="fas fa-redo"></i>
+        </button>
+    </header>
 
-    <!-- 主要内容区域 -->
-    <div class="main-container">
-        <!-- 左侧组件面板 -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h3><i class="fas fa-cube"></i> 网络组件</h3>
-            </div>
-            
-            <!-- 基础组件 -->
-            <div class="component-section">
-                <h4>基础组件</h4>
-                <div class="component-list" id="basicComponents">
-                    <!-- 组件将通过JavaScript动态加载 -->
+    <main class="main">
+        <aside class="panel panel-left">
+            <div class="section">
+                <div class="section-title"><i class="fas fa-plus-circle"></i> Add Layer</div>
+                <div class="palette">
+                    <button class="pal-btn" data-type="linear" style="--c:#3b82f6">
+                        <i class="fas fa-arrows-alt-h"></i><span>Linear</span>
+                    </button>
+                    <button class="pal-btn" data-type="relu" style="--c:#22c55e">
+                        <i class="fas fa-bolt"></i><span>ReLU</span>
+                    </button>
+                    <button class="pal-btn" data-type="sigmoid" style="--c:#f59e0b">
+                        <i class="fas fa-wave-square"></i><span>Sigmoid</span>
+                    </button>
+                    <button class="pal-btn" data-type="tanh" style="--c:#a855f7">
+                        <i class="fas fa-water"></i><span>Tanh</span>
+                    </button>
+                    <button class="pal-btn" data-type="leaky_relu" style="--c:#14b8a6">
+                        <i class="fas fa-angle-double-right"></i><span>LeakyReLU</span>
+                    </button>
+                    <button class="pal-btn" data-type="dropout" style="--c:#64748b">
+                        <i class="fas fa-random"></i><span>Dropout</span>
+                    </button>
+                    <button class="pal-btn" data-type="batchnorm" style="--c:#06b6d4">
+                        <i class="fas fa-balance-scale"></i><span>BatchNorm</span>
+                    </button>
                 </div>
             </div>
-            
-            <!-- 高级组件 -->
-            <div class="component-section">
-                <h4>高级组件</h4>
-                <div class="component-list" id="advancedComponents">
-                    <!-- 组件将通过JavaScript动态加载 -->
-                </div>
-            </div>
-            
-            <!-- 网络配置 -->
-            <div class="component-section">
-                <h4>网络配置</h4>
-                <div class="config-panel">
-                    <div class="config-item">
-                        <label>网络名称:</label>
-                        <input type="text" id="networkName" value="my_network">
-                    </div>
-                    <div class="config-item">
-                        <label>输入维度:</label>
-                        <input type="number" id="inputFeatures" value="128" min="1" max="2048">
-                    </div>
-                    <div class="config-item">
-                        <label>输出维度:</label>
-                        <input type="number" id="outputFeatures" value="1" min="1" max="100">
-                    </div>
-                    <div class="config-item">
-                        <label>学习率:</label>
-                        <input type="number" id="learningRate" value="0.0001" step="0.0001" min="0.0001" max="0.1">
+            <div class="section">
+                <div class="section-title"><i class="fas fa-layer-group"></i> Network Layers</div>
+                <div id="layerList" class="layer-list">
+                    <div class="empty-hint" id="emptyHint">
+                        <i class="fas fa-hand-pointer"></i>
+                        <p>Click a layer above or load a preset</p>
                     </div>
                 </div>
             </div>
-        </div>
+            <div class="section" id="propsSection" style="display:none">
+                <div class="section-title"><i class="fas fa-sliders-h"></i> Properties</div>
+                <div id="propsContent"></div>
+            </div>
+        </aside>
 
-        <!-- 中央画布区域 -->
-        <div class="canvas-container">
-            <div class="canvas-header">
-                <h3><i class="fas fa-project-diagram"></i> 网络架构设计</h3>
-                <div class="canvas-info">
-                    <span id="canvasStats">组件: 0 | 连接: 0 | 参数: 0</span>
+        <section class="panel panel-center">
+            <div class="center-header">
+                <span>Network Architecture</span>
+                <span class="param-badge" id="paramBadge">0 params</span>
+            </div>
+            <div class="svg-container" id="svgContainer">
+                <svg id="networkSvg" class="network-svg" width="100%">
+                    <defs>
+                        <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                        <filter id="glow-sm"><feGaussianBlur stdDeviation="1.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                        <linearGradient id="connGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6"/><stop offset="100%" stop-color="#818cf8" stop-opacity="0.6"/></linearGradient>
+                    </defs>
+                </svg>
+                <div class="svg-empty" id="svgEmpty">
+                    <i class="fas fa-project-diagram"></i>
+                    <p>Your network will appear here</p>
                 </div>
             </div>
-            <div id="networkCanvas" class="network-canvas">
-                <!-- 拖拽提示 -->
-                <div class="canvas-hint" id="canvasHint">
-                    <i class="fas fa-hand-pointer"></i>
-                    <p>从左侧拖拽组件到此处开始构建您的神经网络</p>
-                    <small>支持双3090GPU训练，最大深度10层，参数量5000万以内</small>
+        </section>
+
+        <aside class="panel panel-right">
+            <div class="section">
+                <div class="section-title"><i class="fas fa-database"></i> Dataset</div>
+                <select id="datasetSelect" class="select">
+                    <option value="xor">XOR Gate (2D, 2 classes)</option>
+                    <option value="circles">Circles (2D, 2 classes)</option>
+                    <option value="spiral">Spiral (2D, 3 classes)</option>
+                    <option value="moons">Moons (2D, 2 classes)</option>
+                    <option value="gauss">Gaussian (4D, 3 classes)</option>
+                </select>
+                <div class="dataset-info" id="datasetInfo"></div>
+            </div>
+            <div class="section">
+                <div class="section-title"><i class="fas fa-cog"></i> Training Config</div>
+                <label class="slider-label">
+                    Epochs: <strong id="epochsVal">100</strong>
+                    <input type="range" id="epochsSlider" min="10" max="500" step="10" value="100" class="slider">
+                </label>
+                <label class="slider-label">
+                    Learning Rate: <strong id="lrVal">0.010</strong>
+                    <input type="range" id="lrSlider" min="-3.5" max="-0.3" step="0.1" value="-2" class="slider">
+                </label>
+            </div>
+            <div class="train-controls">
+                <button id="trainBtn" class="btn-train" disabled><i class="fas fa-play"></i> Start Training</button>
+                <button id="stopBtn" class="btn-stop" style="display:none"><i class="fas fa-stop"></i> Stop</button>
+            </div>
+            <div class="section">
+                <div class="section-title"><i class="fas fa-chart-line"></i> Training Progress</div>
+                <div class="chart-wrap"><canvas id="chartCanvas"></canvas></div>
+                <div class="stats-row">
+                    <div class="stat-box"><div class="stat-val" id="lossVal">&mdash;</div><div class="stat-lbl">Loss</div></div>
+                    <div class="stat-box"><div class="stat-val" id="accVal">&mdash;</div><div class="stat-lbl">Accuracy</div></div>
+                    <div class="stat-box"><div class="stat-val" id="epochVal">&mdash;</div><div class="stat-lbl">Epoch</div></div>
                 </div>
             </div>
-        </div>
+            <div class="section" id="boundarySection" style="display:none">
+                <div class="section-title"><i class="fas fa-border-all"></i> Decision Boundary</div>
+                <div class="boundary-wrap"><canvas id="boundaryCanvas" width="280" height="280"></canvas></div>
+            </div>
+        </aside>
+    </main>
 
-        <!-- 右侧属性面板 -->
-        <div class="properties-panel">
-            <div class="panel-header">
-                <h3><i class="fas fa-sliders-h"></i> 组件属性</h3>
-            </div>
-            <div class="panel-content" id="propertiesContent">
-                <div class="no-selection">
-                    <i class="fas fa-mouse-pointer"></i>
-                    <p>选择一个组件来查看和编辑其属性</p>
-                </div>
-            </div>
-        </div>
-    </div>
+    <footer class="footer">
+        <span>SmartNet Playground &mdash; CPU-friendly neural network demo</span>
+        <span id="statusText">Ready</span>
+    </footer>
 
-    <!-- 底部状态栏 -->
-    <div class="status-bar">
-        <div class="status-left">
-            <span id="systemStatus">🟢 系统就绪</span>
-            <span id="gpuInfo">GPU: 检查中...</span>
-        </div>
-        <div class="status-right">
-            <span id="networkStatus">未构建网络</span>
-            <span id="trainingStatus">训练未开始</span>
-        </div>
-    </div>
-
-    <!-- 模态对话框 -->
-    <!-- 构建结果对话框 -->
-    <div id="buildModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-cogs"></i> 网络构建结果</h3>
-                <span class="close" data-modal="buildModal">&times;</span>
-            </div>
-            <div class="modal-body" id="buildModalBody">
-                <!-- 构建结果内容 -->
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary close-btn" data-modal="buildModal">关闭</button>
-                <button id="proceedTrainBtn" class="btn btn-success">继续训练</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 训练配置对话框 -->
-    <div id="trainModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-play"></i> 训练配置</h3>
-                <span class="close" data-modal="trainModal">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="train-config">
-                    <div class="config-item">
-                        <label>训练轮数 (Epochs):</label>
-                        <input type="number" id="trainEpochs" value="10" min="1" max="100">
-                        <small>建议1-100轮，过多可能导致过拟合</small>
-                    </div>
-                    <div class="config-item">
-                        <label>批次大小 (Batch Size):</label>
-                        <input type="number" id="trainBatchSize" value="32" min="1" max="256">
-                        <small>双3090建议32-256，根据模型大小调整</small>
-                    </div>
-                    <div class="config-item">
-                        <label>学习率 (Learning Rate):</label>
-                        <input type="number" id="trainLearningRate" value="0.0001" step="0.0001" min="0.0001" max="0.1">
-                        <small>建议0.0001-0.01之间</small>
-                    </div>
-                    <div class="gpu-selection">
-                        <label>GPU选择:</label>
-                        <div class="gpu-options" id="gpuOptions">
-                            <!-- GPU选项将动态加载 -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary close-btn" data-modal="trainModal">取消</button>
-                <button id="startTrainBtn" class="btn btn-success">开始训练</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 训练进度对话框 -->
-    <div id="progressModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-spinner fa-spin"></i> 训练进度</h3>
-                <button class="btn btn-danger btn-sm" id="stopTrainBtn">停止训练</button>
-            </div>
-            <div class="modal-body">
-                <div class="progress-info">
-                    <div class="progress-stats">
-                        <div class="stat-item">
-                            <label>当前轮次:</label>
-                            <span id="currentEpoch">0</span> / <span id="totalEpochs">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <label>训练损失:</label>
-                            <span id="currentLoss">--</span>
-                        </div>
-                        <div class="stat-item">
-                            <label>准确率:</label>
-                            <span id="currentAccuracy">--</span>
-                        </div>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-                    </div>
-                    <div class="progress-text" id="progressText">准备开始训练...</div>
-                </div>
-                <div class="training-log" id="trainingLog">
-                    <!-- 训练日志 -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary close-btn" data-modal="progressModal" disabled id="closeProgressBtn">关闭</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- JavaScript -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/touch-support.js') }}"></script>
-    <script>
-        // 页面加载完成后初始化应用
-        document.addEventListener('DOMContentLoaded', function() {
-            if (typeof SmartNetApp !== 'undefined') {
-                window.smartNetApp = SmartNetApp.init();
-                
-                // 设备检测和优化
-                if (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent)) {
-                    document.body.classList.add('mobile-device');
-                    console.log('移动设备检测：已启用触摸优化');
-                    
-                    // 添加移动端特定的提示
-                    const mobileHint = document.createElement('div');
-                    mobileHint.className = 'mobile-hint';
-                    mobileHint.innerHTML = `
-                        <div class="mobile-hint-content">
-                            <i class="fas fa-mobile-alt"></i>
-                            <span>移动设备模式：支持触摸拖拽操作</span>
-                            <button onclick="this.parentElement.parentElement.style.display='none'">×</button>
-                        </div>
-                    `;
-                    mobileHint.style.cssText = `
-                        position: fixed;
-                        top: 70px;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        z-index: 9999;
-                        background: rgba(52, 152, 219, 0.9);
-                        color: white;
-                        padding: 0.5rem;
-                        border-radius: 8px;
-                        font-size: 0.9rem;
-                        animation: slideDown 0.5s ease-out;
-                    `;
-                    document.body.appendChild(mobileHint);
-                    
-                    // 3秒后自动隐藏
-                    setTimeout(() => {
-                        if (mobileHint.parentElement) {
-                            mobileHint.style.display = 'none';
-                        }
-                    }, 5000);
-                }
-                
-                // iPad特殊优化
-                if (/iPad/i.test(navigator.userAgent) || 
-                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
-                    document.body.classList.add('ipad-device');
-                    console.log('iPad设备检测：已启用iPad优化');
-                }
-                
-                // 检查是否从代码编辑器导入
-                const urlParams = new URLSearchParams(window.location.search);
-                if (urlParams.get('import') === 'true') {
-                    const importedNetwork = localStorage.getItem('imported_network');
-                    if (importedNetwork) {
-                        try {
-                            const network = JSON.parse(importedNetwork);
-                            // TODO: 将代码编辑器的网络导入到可视化界面
-                            console.log('导入网络:', network);
-                            localStorage.removeItem('imported_network');
-                        } catch (error) {
-                            console.error('导入网络失败:', error);
-                        }
-                    }
-                }
-            } else {
-                console.error('SmartNetApp未加载');
-            }
-        });
-        
-        // 添加代码编辑器链接功能
-        function switchToCodeEditor() {
-            window.location.href = '/code-editor';
-        }
-    </script>
 </body>
 </html>

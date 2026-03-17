@@ -1,0 +1,43 @@
+# Ignore everything not needed in the container
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+.idea
+*.md
+*.yml
+*.bat
+*.sh
+*.txt
+
+# Large/unnecessary dirs
+smartnet/
+examples/
+outputs/
+definitions/
+scripts/
+node_modules/
+.venv/
+*.egg-info/
+
+# Unnecessary web_app files
+web_app/uploads/
+web_app/*.pid
+web_app/*.sh
+web_app/*.html
+web_app/static/css/code-editor.css
+
+# Build/test artifacts
+Dockerfile
+docker-compose.yml
+Makefile
+setup.py
+setup.cfg
+pyproject.toml
+MANIFEST.in
+*.egg
+dist/
+build/
+test_*
+quick_test.py
